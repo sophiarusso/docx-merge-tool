@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOCX Blank-Cell Merge Tool</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f5f5f4;
+      --bg-info: #e6f1fb;
+      --text: #1a1a18;
+      --text-secondary: #6b6b68;
+      --text-info: #185fa5;
+      --border: rgba(0,0,0,0.12);
+      --border-md: rgba(0,0,0,0.22);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --blue: #378add;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a;
+        --bg-secondary: #2a2a28;
+        --bg-info: #0c447c;
+        --text: #f0efea;
+        --text-secondary: #a8a8a4;
+        --text-info: #85b7eb;
+        --border: rgba(255,255,255,0.12);
+        --border-md: rgba(255,255,255,0.22);
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg-secondary);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .tool-header { margin-bottom: 2rem; }
+    .tool-header h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+    .tool-header p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+    .section-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .zone {
+      border: 1.5px dashed var(--border-md);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .zone:hover, .zone.drag { background: var(--bg-secondary); }
+    .zone-icon { font-size: 24px; color: var(--text-secondary); }
+    .zone-text { margin-top: 8px; font-size: 14px; color: var(--text-secondary); }
+    .zone-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      margin-bottom: 8px;
+    }
+
+    .file-badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: var(--bg-info);
+      color: var(--text-info);
+      min-width: 52px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .file-name {
+      flex: 1;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-size { font-size: 12px; color: var(--text-secondary); }
+
+    .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 20px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .remove-btn:hover { color: #e24b4a; }
+
+    .merge-btn {
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      background: var(--bg);
+      border: 0.5px solid var(--border-md);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .merge-btn:hover:not(:disabled) { background: var(--bg-secondary); }
+    .merge-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .progress-wrap {
+      height: 4px;
+      background: var(--bg-secondary);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 12px;
+      display: none;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0;
+      background: var(--blue);
+      border-radius: 99px;
+      transition: width 0.3s;
+    }
+
+    .log {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: monospace;
+      margin-top: 10px;
+      min-height: 18px;
+    }
+
+    .result-area {
+      margin-top: 1.5rem;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--bg);
+      border: 0.5px solid var(--border-md);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 500;
+      text-decoration: none;
+      color: var(--text);
+      transition: background 0.15s;
+    }
+    .download-btn:hover { background: var(--bg-secondary); }
+
+    .result-stat { font-size: 13px; color: var(--text-secondary); }
+    .result-stat strong { color: var(--text); }
+
+    .divider { border: none; border-top: 0.5px solid var(--border); margin: 1.5rem 0; }
+
+    .section { margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="tool-header">
+      <h1><i class="ti ti-git-merge" aria-hidden="true"></i> DOCX Merge Tool</h1>
+      <p>Fill blank cells in a target .docx file using data from up to 6 source files. Files uploaded first have higher priority. All processing happens in your browser — no data is uploaded anywhere.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-label">
+        <i class="ti ti-file-text" aria-hidden="true"></i> Target file (the one to fill)
+      </div>
+      <div class="zone" id="target-zone"
+        onclick="document.getElementById('target-input').click()"
+        ondragover="handleDrag(event,'target-zone')"
+        ondragleave="leaveDrag('target-zone')"
+        ondrop="handleDrop(event,'target')">
+        <div class="zone-icon"><i class="ti ti-upload" aria-hidden="true"></i></div>
+        <div class="zone-text">Drop target .docx here or click to browse</div>
+      </div>
+      <input type="file" id="target-input" accept=".docx" style="display:none" onchange="setTarget(this.files[0])">
+      <div id="target-display" style="margin-top:8px; display:none;"></div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section">
+      <div class="section-label">
+        <i class="ti ti-files" aria-hidden="true"></i> Source files (up to 6 — first uploaded = highest priority)
+      </div>
+      <div class="zone" id="source-zone"
+        onclick="document.getElementById('source-input').click()"
+        ondragover="handleDrag(event,'source-zone')"
+        ondragleave="leaveDrag('source-zone')"
+        ondrop="handleDrop(event,'source')">
+        <div class="zone-icon"><i class="ti ti-upload" aria-hidden="true"></i></div>
+        <div class="zone-text">Drop source .docx files here or click to browse</div>
+        <div class="zone-sub">You can select multiple files at once</div>
+      </div>
+      <input type="file" id="source-input" accept=".docx" multiple style="display:none" onchange="addSources(this.files)">
+      <div id="source-list" style="margin-top:8px;"></div>
+    </div>
+
+    <hr class="divider">
+
+    <button class="merge-btn" id="merge-btn" onclick="runMerge()" disabled>
+      <i class="ti ti-git-merge" aria-hidden="true"></i> Merge files
+    </button>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="log" id="log"></div>
+
+    <div class="result-area" id="result-area">
+      <a id="download-link" class="download-btn" href="#" download>
+        <i class="ti ti-download" aria-hidden="true"></i> <span id="download-label">Download merged file</span>
+      </a>
+      <span class="result-stat" id="result-stat"></span>
+    </div>
+  </div>
+
+  <script>
+    let targetFile = null;
+    let sourceFiles = [];
+
+    function handleDrag(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag'); }
+    function leaveDrag(id) { document.getElementById(id).classList.remove('drag'); }
+
+    function handleDrop(e, type) {
+      e.preventDefault();
+      leaveDrag(type === 'target' ? 'target-zone' : 'source-zone');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.docx'));
+      if (type === 'target' && files[0]) setTarget(files[0]);
+      else if (type === 'source') addSources(files);
+    }
+
+    function setTarget(file) {
+      if (!file) return;
+      targetFile = file;
+      const d = document.getElementById('target-display');
+      d.style.display = 'block';
+      d.innerHTML = `<div class="file-item">
+        <span class="file-badge">Target</span>
+        <span class="file-name">${file.name}</span>
+        <span class="file-size">${(file.size/1024).toFixed(0)} KB</span>
+        <button class="remove-btn" onclick="removeTarget()" aria-label="Remove target">×</button>
+      </div>`;
+      document.getElementById('target-zone').style.display = 'none';
+      checkReady();
+    }
+
+    function removeTarget() {
+      targetFile = null;
+      document.getElementById('target-display').style.display = 'none';
+      document.getElementById('target-zone').style.display = 'block';
+      document.getElementById('target-input').value = '';
+      checkReady();
+    }
+
+    function addSources(files) {
+      const arr = Array.from(files).filter(f => f.name.endsWith('.docx'));
+      for (const f of arr) {
+        if (sourceFiles.length >= 6) break;
+        if (!sourceFiles.find(s => s.name === f.name)) sourceFiles.push(f);
+      }
+      renderSources();
+      checkReady();
+    }
+
+    function removeSource(idx) {
+      sourceFiles.splice(idx, 1);
+      renderSources();
+      checkReady();
+    }
+
+    function renderSources() {
+      const list = document.getElementById('source-list');
+      list.innerHTML = '';
+      sourceFiles.forEach((f, i) => {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = `<span class="file-badge">Source #${i+1}</span>
+          <span class="file-name">${f.name}</span>
+          <span class="file-size">${(f.size/1024).toFixed(0)} KB</span>
+          <button class="remove-btn" onclick="removeSource(${i})" aria-label="Remove source ${i+1}">×</button>`;
+        list.appendChild(div);
+      });
+      document.getElementById('source-zone').style.display = sourceFiles.length >= 6 ? 'none' : 'block';
+    }
+
+    function checkReady() {
+      document.getElementById('merge-btn').disabled = !(targetFile && sourceFiles.length > 0);
+      document.getElementById('result-area').style.display = 'none';
+      document.getElementById('log').textContent = '';
+      document.getElementById('progress-wrap').style.display = 'none';
+      document.getElementById('progress-bar').style.width = '0';
+    }
+
+    function setLog(msg) { document.getElementById('log').textContent = msg; }
+    function setProgress(pct) {
+      document.getElementById('progress-wrap').style.display = 'block';
+      document.getElementById('progress-bar').style.width = pct + '%';
+    }
+
+    async function readDocx(file) {
+      const buf = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
+      const xml = await zip.file('word/document.xml').async('string');
+      return { zip, xml };
+    }
+
+    function extractParaMap(xml) {
+      const map = {};
+      const re = /<w:p\s[^>]*w14:paraId="([A-F0-9]+)"[^>]*>([\s\S]*?)<\/w:p>/g;
+      let m;
+      while ((m = re.exec(xml)) !== null) map[m[1]] = m[2];
+      return map;
+    }
+
+    function hasText(body) {
+      return /<w:t[^>]*>[^<]+<\/w:t>/.test(body);
+    }
+
+    async function runMerge() {
+      const btn = document.getElementById('merge-btn');
+      btn.disabled = true;
+      document.getElementById('result-area').style.display = 'none';
+      setProgress(5);
+      setLog('Reading target file...');
+
+      try {
+        const { zip: targetZip, xml: targetXml } = await readDocx(targetFile);
+        setProgress(15);
+        setLog('Reading source files...');
+
+        const sourceMaps = [];
+        for (let i = 0; i < sourceFiles.length; i++) {
+          const { xml } = await readDocx(sourceFiles[i]);
+          sourceMaps.push(extractParaMap(xml));
+          setProgress(15 + (i + 1) * (40 / sourceFiles.length));
+        }
+
+        setLog('Merging...');
+        setProgress(60);
+
+        let filled = 0;
+        const newXml = targetXml.replace(
+          /(<w:p\s[^>]*w14:paraId="([A-F0-9]+)"[^>]*>)([\s\S]*?)(<\/w:p>)/g,
+          (full, open, pid, body, close) => {
+            if (hasText(body)) return full;
+            for (const src of sourceMaps) {
+              if (src[pid] && hasText(src[pid])) { filled++; return open + src[pid] + close; }
+            }
+            return full;
+          }
+        );
+
+        setProgress(85);
+        setLog('Packing output...');
+        targetZip.file('word/document.xml', newXml);
+        const blob = await targetZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        setProgress(100);
+
+        const outName = targetFile.name.replace(/\.docx$/i, '') + '_merged.docx';
+        const url = URL.createObjectURL(blob);
+        const link = document.getElementById('download-link');
+        link.href = url;
+        link.download = outName;
+        document.getElementById('download-label').textContent = 'Download ' + outName;
+        document.getElementById('result-stat').innerHTML =
+          `<strong>${filled}</strong> cell${filled !== 1 ? 's' : ''} filled from <strong>${sourceFiles.length}</strong> source file${sourceFiles.length !== 1 ? 's' : ''}`;
+        document.getElementById('result-area').style.display = 'flex';
+        setLog('');
+      } catch (err) {
+        setLog('Error: ' + err.message);
+      }
+
+      btn.disabled = false;
+      checkReady();
+      document.getElementById('merge-btn').disabled = false;
+    }
+  </script>
+</body>
+</html>
